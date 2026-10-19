@@ -9,21 +9,25 @@ async fn main() -> Result<()> {
 
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
-        eprintln!("Usage: kbd-cli <command>");
+        eprintln!("Usage: kbd-cli <command> [args]");
         eprintln!("Commands:");
-        eprintln!("  trigger-scan    Trigger scan mode");
+        eprintln!("  trigger-scan [region]    Trigger scan mode");
+        eprintln!("                           Regions: all, top-left, top-right, bottom-left, bottom-right");
         std::process::exit(1);
     }
 
     let command = &args[1];
 
     if command == "trigger-scan" {
+        let region = if args.len() >= 3 { &args[2] } else { "all" };
+        let msg = format!("trigger-scan {}", region);
+
         let mut stream = UnixStream::connect(&ipc_path)
             .await
             .context(format!("Failed to connect to daemon socket at {}. Is kbd-daemon running?", ipc_path))?;
 
-        stream.write_all(b"trigger-scan").await?;
-        println!("Scan mode triggered.");
+        stream.write_all(msg.as_bytes()).await?;
+        println!("Scan mode triggered for region: {}", region);
     } else {
         eprintln!("Unknown command: {}", command);
         std::process::exit(1);

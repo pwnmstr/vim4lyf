@@ -1,8 +1,8 @@
+use tokio::net::UnixListener;
 use anyhow::Result;
-use log::{error, info};
+use log::{info, error};
 use std::path::Path;
 use tokio::io::AsyncReadExt;
-use tokio::net::{UnixListener, UnixStream};
 
 pub struct DaemonIpc {
     socket_path: String,
@@ -17,7 +17,7 @@ impl DaemonIpc {
 
     pub async fn start<F, Fut>(&self, mut on_trigger: F) -> Result<()>
     where
-        F: FnMut() -> Fut + Send + 'static,
+        F: FnMut(String) -> Fut + Send + 'static,
         Fut: std::future::Future<Output = ()> + Send + 'static,
     {
         if Path::new(&self.socket_path).exists() {
@@ -32,10 +32,12 @@ impl DaemonIpc {
                 Ok((mut stream, _addr)) => {
                     let mut buf = [0; 1024];
                     if let Ok(n) = stream.read(&mut buf).await {
-                        let msg = String::from_utf8_lossy(&buf[..n]);
-                        if msg.trim() == "trigger-scan" {
-                            info!("Received scan trigger via IPC");
-                            on_trigger().await;
+                        let msg = String::from_utf8_lossy(&buf[..n]).trim().to_string();
+                        if msg.starts_with("trigger-scan") {
+                            let parts: Vec<&str> = msg.split_whitespace().collect();
+                            let region = if parts.len() > 1 { parts[1].to_string() } else { "all".to_string() };
+                            info!("Received scan trigger via IPC for region: {}", region);
+                            on_trigger(region).await;
                         }
                     }
                 }

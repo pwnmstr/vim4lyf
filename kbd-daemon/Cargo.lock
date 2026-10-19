@@ -995,6 +995,7 @@ name = "kbd-daemon"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-channel",
  "atspi",
  "env_logger",
  "glib",

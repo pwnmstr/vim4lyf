@@ -7,6 +7,7 @@ A lightweight Linux daemon and companion CLI that allows you to identify and act
 - **Accessibility API Support**: Uses AT-SPI to scan for interactable UI elements like buttons, links, tabs, and menus.
 - **Fast and Lightweight**: Built in Rust.
 - **Customizable Key Mappings**: Generates keyboard shortcuts over detected UI elements using `a, s, d, f` (quadrant-based) or sequential mappings.
+- **Partial Screen Scanning**: Target specific regions of your display to reduce visual clutter (e.g., `top-left`, `bottom-right`).
 
 ## Requirements
 - A Wayland compositor supporting `wlr-layer-shell-unstable-v1` and `wlr-virtual-pointer-unstable-v1` (e.g., Hyprland, Sway).
@@ -49,9 +50,11 @@ Start the daemon in the background (you may want to add this to your startup scr
 kbd-daemon &
 ```
 
-Then, trigger "Scan Mode" to show labels on your screen:
+Then, trigger "Scan Mode" to show labels on your screen. You can target specific quadrants:
 ```bash
 kbd-cli trigger-scan
+kbd-cli trigger-scan top-left
+kbd-cli trigger-scan bottom-right
 ```
 
 ### Hyprland Integration
@@ -61,8 +64,12 @@ In your `~/.config/hypr/hyprland.conf`, you can bind a global shortcut to activa
 # Launch the daemon on startup
 exec-once = kbd-daemon
 
-# Trigger the overlay using Super+S
+# Trigger the full overlay using Super+S
 bind = SUPER, S, exec, kbd-cli trigger-scan
+
+# Or trigger quadrant specific overlays
+bind = SUPER, A, exec, kbd-cli trigger-scan left
+bind = SUPER, D, exec, kbd-cli trigger-scan right
 ```
 
 ## How It Works

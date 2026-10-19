@@ -1,57 +1,78 @@
-mod backend;
-mod daemon;
+mod scanner;
 mod mapper;
 mod overlay;
-mod scanner;
+mod backend;
+mod daemon;
 
-use daemon::ipc::DaemonIpc;
-use log::{error, info};
-use mapper::{KeyMapper, SequenceStyle};
-use overlay::Overlay;
+use log::info;
 use scanner::atspi::Scanner;
-use std::collections::HashMap;
-use tokio::task;
+use overlay::Overlay;
+use daemon::ipc::DaemonIpc;
+use gtk4::prelude::*;
+use gtk4::Application;
+use std::thread;
+use crate::scanner::atspi::InteractableElement;
 
-#[tokio::main]
-async fn main() {
+fn main() {
     env_logger::init();
-    info!("Starting kbd-daemon...");
+    info!("Starting kbd-daemon GTK loop...");
 
-    let xdg_runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
-    let ipc_path = format!("{}/kbd-daemon.sock", xdg_runtime_dir);
-    let ipc = DaemonIpc::new(&ipc_path);
+    let app = Application::builder()
+        .application_id("com.github.kbd-daemon.overlay")
+        .build();
 
-    // Run the IPC server
-    ipc.start(|| async {
-        info!("Handling trigger-scan event");
+    app.connect_activate(move |app_ref| {
+        info!("GTK Application activated, starting IPC server in background...");
 
-        let scanner = match Scanner::new().await {
-            Ok(s) => s,
-            Err(e) => {
-                error!("Failed to initialize AT-SPI scanner: {}", e);
-                return;
+        let (sender, receiver) = async_channel::unbounded::<String>();
+        let (element_sender, element_receiver) = async_channel::unbounded::<(Vec<InteractableElement>, String)>();
+
+        // Local GTK loop to handle UI drawing requests without moving the GTK App across threads
+        let app_for_draw = app_ref.clone();
+        glib::MainContext::default().spawn_local(async move {
+            while let Ok((elements, region)) = element_receiver.recv().await {
+                Overlay::draw_filtered(&app_for_draw, elements, &region);
             }
-        };
+        });
 
-        match scanner.scan_active_window().await {
-            Ok(elements) => {
-                info!("Found {} elements", elements.len());
+        // Intermediate tokio context to spawn scanner which is thread-safe (just DBus info)
+        glib::MainContext::default().spawn_local(async move {
+            while let Ok(region) = receiver.recv().await {
+                info!("Main GTK thread received scan request for region: {}", region);
+                let element_sender_clone = element_sender.clone();
+                let region_clone = region.clone();
 
-                let mapper = KeyMapper::new(SequenceStyle::QuadrantAsdf);
-                let mapping = mapper.generate_mapping(elements.len());
-
-                // GTK needs to run on a blocking thread because it manages its own event loop
-                task::spawn_blocking(move || {
-                    info!("Spawning overlay...");
-                    let overlay = Overlay::new();
-                    overlay.draw(mapping, elements);
+                thread::spawn(move || {
+                    let rt = tokio::runtime::Runtime::new().unwrap();
+                    rt.block_on(async {
+                        if let Ok(scanner) = Scanner::new().await {
+                            if let Ok(elements) = scanner.scan_active_window().await {
+                                let _ = element_sender_clone.send((elements, region_clone)).await;
+                            }
+                        }
+                    });
                 });
             }
-            Err(e) => {
-                error!("Scan failed: {}", e);
-            }
-        }
-    })
-    .await
-    .unwrap();
+        });
+
+        // Background thread running pure Tokio IPC daemon
+        let sender_for_ipc = sender.clone();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async move {
+                let xdg_runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
+                let ipc_path = format!("{}/kbd-daemon.sock", xdg_runtime_dir);
+                let ipc = DaemonIpc::new(&ipc_path);
+
+                ipc.start(move |region: String| {
+                    let sender_clone = sender_for_ipc.clone();
+                    async move {
+                        let _ = sender_clone.send(region).await;
+                    }
+                }).await.unwrap();
+            });
+        });
+    });
+
+    app.run();
 }
