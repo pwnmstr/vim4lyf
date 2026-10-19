@@ -14,22 +14,30 @@ A lightweight Linux daemon and companion CLI that allows you to identify and act
 - GTK4 and `gtk4-layer-shell` for the UI overlay.
 
 ### Build Dependencies (Ubuntu/Debian)
+You will need GTK4, D-Bus/AT-SPI development packages, and the `gtk4-layer-shell` library. Note that `gtk4-layer-shell` might not be in your standard package manager (unlike the GTK3 version), so you may need to build it from source if it isn't available.
+
 ```bash
+# Basic dependencies
 sudo apt-get install -y \
   build-essential \
   pkg-config \
   libgtk-4-dev \
   libglib2.0-dev
+
+# If your distro provides gtk4-layer-shell-dev, install it.
+# Otherwise, you can build it from source:
+# git clone https://github.com/wmww/gtk4-layer-shell.git
+# cd gtk4-layer-shell && meson setup build && ninja -C build && sudo ninja -C build install
 ```
 
 ## Setup and Installation
-1. Ensure your Rust toolchain is installed (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`).
-2. Clone the repository and build:
+1. Ensure your Rust toolchain is installed (e.g. using rustup).
+2. Clone the repository and navigate into the `kbd-daemon` folder.
+3. Build the daemon and CLI:
    ```bash
-   cd kbd-daemon
    cargo build --release
    ```
-3. Copy the compiled binaries to your path:
+4. Copy the compiled binaries to your system path:
    ```bash
    sudo cp target/release/kbd-daemon /usr/local/bin/
    sudo cp target/release/kbd-cli /usr/local/bin/
@@ -47,7 +55,8 @@ kbd-cli trigger-scan
 ```
 
 ### Hyprland Integration
-In your `~/.config/hypr/hyprland.conf`, you can bind a global shortcut to activate Scan Mode:
+In your `~/.config/hypr/hyprland.conf`, you can bind a global shortcut to activate Scan Mode. For example, using `Super + S`:
+
 ```conf
 # Launch the daemon on startup
 exec-once = kbd-daemon
@@ -57,6 +66,6 @@ bind = SUPER, S, exec, kbd-cli trigger-scan
 ```
 
 ## How It Works
-When triggered, `kbd-daemon` searches the accessibility tree via AT-SPI to find interactive elements and determines their bounding boxes. It then spawns a GTK4 fullscreen, transparent `layer-shell` overlay over your desktop.
+When triggered via the CLI, `kbd-daemon` receives an IPC command on a Unix socket inside your `$XDG_RUNTIME_DIR`. It then searches the accessibility tree via AT-SPI to find interactive elements and determines their bounding boxes.
 
-The overlay grabs exclusive keyboard focus. Each interactable element is assigned a small keystroke sequence label. Typing the sequence will directly trigger the element's action via AT-SPI, or simulate a mouse click at the element's coordinates as a fallback.
+It spawns a GTK4 fullscreen, transparent `layer-shell` overlay over your desktop which grabs exclusive keyboard focus. Each interactable element is assigned a small keystroke sequence label. Typing the sequence will directly trigger the element's action via AT-SPI, or simulate a mouse click at the element's coordinates as a fallback.
