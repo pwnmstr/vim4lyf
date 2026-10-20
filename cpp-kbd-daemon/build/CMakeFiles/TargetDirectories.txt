@@ -1,0 +1,8 @@
+/app/cpp-kbd-daemon/build/CMakeFiles/edit_cache.dir
+/app/cpp-kbd-daemon/build/CMakeFiles/rebuild_cache.dir
+/app/cpp-kbd-daemon/build/daemon/CMakeFiles/kbd-daemon.dir
+/app/cpp-kbd-daemon/build/daemon/CMakeFiles/edit_cache.dir
+/app/cpp-kbd-daemon/build/daemon/CMakeFiles/rebuild_cache.dir
+/app/cpp-kbd-daemon/build/cli/CMakeFiles/kbd-cli.dir
+/app/cpp-kbd-daemon/build/cli/CMakeFiles/edit_cache.dir
+/app/cpp-kbd-daemon/build/cli/CMakeFiles/rebuild_cache.dir
