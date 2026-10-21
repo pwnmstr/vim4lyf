@@ -33,11 +33,9 @@ impl DaemonIpc {
                     let mut buf = [0; 1024];
                     if let Ok(n) = stream.read(&mut buf).await {
                         let msg = String::from_utf8_lossy(&buf[..n]).trim().to_string();
-                        if msg.starts_with("trigger-scan") {
-                            let parts: Vec<&str> = msg.split_whitespace().collect();
-                            let region = if parts.len() > 1 { parts[1].to_string() } else { "all".to_string() };
-                            info!("Received scan trigger via IPC for region: {}", region);
-                            on_trigger(region).await;
+                        if msg.starts_with("trigger-scan") || msg == "show-help" {
+                            info!("Received IPC msg: {}", msg);
+                            on_trigger(msg).await;
                         }
                     }
                 }

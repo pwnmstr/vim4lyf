@@ -7,6 +7,7 @@ mod daemon;
 use log::info;
 use scanner::atspi::Scanner;
 use overlay::Overlay;
+use overlay::help::show_help_popup;
 use daemon::ipc::DaemonIpc;
 use gtk4::prelude::*;
 use gtk4::Application;
@@ -27,7 +28,6 @@ fn main() {
         let (sender, receiver) = async_channel::unbounded::<String>();
         let (element_sender, element_receiver) = async_channel::unbounded::<(Vec<InteractableElement>, String)>();
 
-        // Local GTK loop to handle UI drawing requests without moving the GTK App across threads
         let app_for_draw = app_ref.clone();
         glib::MainContext::default().spawn_local(async move {
             while let Ok((elements, region)) = element_receiver.recv().await {
@@ -35,27 +35,33 @@ fn main() {
             }
         });
 
-        // Intermediate tokio context to spawn scanner which is thread-safe (just DBus info)
+        let app_for_help = app_ref.clone();
         glib::MainContext::default().spawn_local(async move {
-            while let Ok(region) = receiver.recv().await {
-                info!("Main GTK thread received scan request for region: {}", region);
-                let element_sender_clone = element_sender.clone();
-                let region_clone = region.clone();
+            while let Ok(msg) = receiver.recv().await {
+                if msg == "show-help" {
+                    info!("Main GTK thread received help request");
+                    show_help_popup(&app_for_help);
+                } else if msg.starts_with("trigger-scan") {
+                    let region = msg.replace("trigger-scan", "").trim().to_string();
+                    let region = if region.is_empty() { "all".to_string() } else { region };
 
-                thread::spawn(move || {
-                    let rt = tokio::runtime::Runtime::new().unwrap();
-                    rt.block_on(async {
-                        if let Ok(scanner) = Scanner::new().await {
-                            if let Ok(elements) = scanner.scan_active_window().await {
-                                let _ = element_sender_clone.send((elements, region_clone)).await;
+                    info!("Main GTK thread received scan request for region: {}", region);
+                    let element_sender_clone = element_sender.clone();
+
+                    thread::spawn(move || {
+                        let rt = tokio::runtime::Runtime::new().unwrap();
+                        rt.block_on(async {
+                            if let Ok(scanner) = Scanner::new().await {
+                                if let Ok(elements) = scanner.scan_active_window().await {
+                                    let _ = element_sender_clone.send((elements, region)).await;
+                                }
                             }
-                        }
+                        });
                     });
-                });
+                }
             }
         });
 
-        // Background thread running pure Tokio IPC daemon
         let sender_for_ipc = sender.clone();
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
@@ -64,10 +70,10 @@ fn main() {
                 let ipc_path = format!("{}/kbd-daemon.sock", xdg_runtime_dir);
                 let ipc = DaemonIpc::new(&ipc_path);
 
-                ipc.start(move |region: String| {
+                ipc.start(move |msg: String| {
                     let sender_clone = sender_for_ipc.clone();
                     async move {
-                        let _ = sender_clone.send(region).await;
+                        let _ = sender_clone.send(msg).await;
                     }
                 }).await.unwrap();
             });

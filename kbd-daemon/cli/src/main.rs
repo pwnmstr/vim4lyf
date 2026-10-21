@@ -13,6 +13,7 @@ async fn main() -> Result<()> {
         eprintln!("Commands:");
         eprintln!("  trigger-scan [region]    Trigger scan mode");
         eprintln!("                           Regions: all, top-left, top-right, bottom-left, bottom-right");
+        eprintln!("  show-help                Show help popup overlay");
         std::process::exit(1);
     }
 
@@ -28,6 +29,13 @@ async fn main() -> Result<()> {
 
         stream.write_all(msg.as_bytes()).await?;
         println!("Scan mode triggered for region: {}", region);
+    } else if command == "show-help" {
+        let mut stream = UnixStream::connect(&ipc_path)
+            .await
+            .context(format!("Failed to connect to daemon socket at {}. Is kbd-daemon running?", ipc_path))?;
+
+        stream.write_all(b"show-help").await?;
+        println!("Help popup triggered.");
     } else {
         eprintln!("Unknown command: {}", command);
         std::process::exit(1);

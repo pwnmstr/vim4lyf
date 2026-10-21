@@ -1,1 +1,0 @@
-/usr/bin/c++ "CMakeFiles/kbd-cli.dir/main.cpp.o" -o kbd-cli
